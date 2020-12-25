@@ -1,3 +1,4 @@
+# import dependencies 
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -22,7 +23,7 @@ Station = Base.classes.station
 # Create app
 app = Flask(__name__)
 
-# define endpoint
+# Define endpoint, Establish home page, List all routes that are available
 @app.route("/")
 def index():
     return """
@@ -36,6 +37,7 @@ def index():
         /api/v1.0/start-date/end-date
         """
 
+# Return a JSON list of stations from the dataset
 @app.route("/api/v1.0/station")
 def station():
 
@@ -57,6 +59,7 @@ def station():
 
     return jsonify(stations)
 
+# Return Measurements for each station
 @app.route("/api/v1.0/measurement")
 def measurement():
 
@@ -77,6 +80,7 @@ def measurement():
 
     return jsonify(measurements)
 
+# Return Measurements for a specific station
 @app.route("/api/v1.0/measurement/<station>")
 def measure(station):
     session = Session(engine)
@@ -111,17 +115,29 @@ delta = dt.timedelta(days=365)
 rpt_start_date = rpt_end_date - delta
 print(rpt_start_date)
 
+# Convert the query results to a dictionary using date as the key and prcp as the value
 @app.route("/api/v1.0/precipitation")
 def precipitation():
 # Query last 12 months and assign results into a Pandas DataFrame sorted by date as index
     session = Session(engine)
-    twlv_months = session.query(Measurement.date, Measurement.prcp).filter(Measurement.date >= rpt_start_date).all()
-    # twlv_months =  pd.DataFrame(twlv_months).fillna(0).set_index('date').sort_index()
+    twlv_months = session.query(Measurement.station, Measurement.date, Measurement.prcp)\
+                    .filter(Measurement.date >= rpt_start_date)\
+                    .all()
+    prcp_info =[]
+    for prcp_sta, prcp_date, prcp_prcp in twlv_months:
+        prcp_dict={
+            'station': prcp_sta,
+            'date': prcp_date,
+            'prcp': prcp_prcp
+        }
+        prcp_info.append(prcp_dict)
+        
     session.close()
 
-    return jsonify(twlv_months)
+    return jsonify(prcp_info)
 
-
+# Query the dates and temperature observations of the most active station for the last year of date
+# Return a JSON list of temperature observations (TOBS) for the previous year
 @app.route("/api/v1.0/most_active_station/stats_tobs")
 def tobs():
     session = Session(engine)
@@ -176,7 +192,7 @@ def tobs():
     station_low_df.fillna(value=0, inplace=True)
     station_low_df.set_index('Station', inplace=True)
     station_low_df.sort_values('Observations', ascending=False)
-    # print("Most Active Station:")
+
     most_active_stat = station_low_df.loc[[most_active]].to_dict()
         
     act_station_twlv_months = session.query(Measurement.station, Measurement.date, Measurement.tobs)\
@@ -192,13 +208,11 @@ def tobs():
         }
         act_stat_sdt.append(stdt)
 
-    # act_station_twlv_months = pd.DataFrame(act_station_twlv_months)
-    # act_station_twlv_months = act_station_twlv_months.to_dict()
-
     session.close()
 
     return jsonify(most_active_stat, act_stat_sdt)
 
+# Given the start only, calculate TMIN, TAVG, and TMAX for all dates greater than and equal to the start date
 @app.route("/api/v1.0/<sdate>")
 def startDate(sdate):
     session = Session(engine)
@@ -215,7 +229,7 @@ def startDate(sdate):
         stat_dict={
             'tobs_min': tobs_min,
             'tobs_avg': tobs_avg,
-            'tobs_max': tobs_max,
+            'tobs_max': tobs_max
         }
         summary_stats_one.append(stat_dict)
 
@@ -223,6 +237,7 @@ def startDate(sdate):
 
     return jsonify(summary_stats_one)
 
+# When given start and end date, calculate the TMIN, TAVG, and TMAX for dates between the start and end date inclusive
 @app.route("/api/v1.0/<sdate>/<edate>")
 def startDateEndDate(sdate,edate):
     session = Session(engine)
